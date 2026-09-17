@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Steel Frame Model — Itagaki Workflow Demo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --blueprint:#0b2942;
+    --blueprint-line:#4f8ec7;
+    --blueprint-line-dim:#2a597f;
+    --paper:#f4f2ec;
+    --ink:#1c2b36;
+    --steel-red:#8b2f2f;
+    --steel-blue:#2f5c8b;
+    --steel-gold:#b8863f;
+    --panel-bg:#0e3452;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);
+    font-family:'Courier New',ui-monospace,monospace;}
+  #app{display:flex;flex-direction:column;height:100%;}
+
+  header{background:var(--blueprint);color:#e8f1fb;padding:14px 22px;
+    border-bottom:3px solid var(--blueprint-line);display:flex;
+    justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;}
+  header h1{font-family:Georgia,'Times New Roman',serif;font-size:20px;
+    font-weight:normal;letter-spacing:0.3px;margin:0;}
+  header .sub{font-size:12px;color:var(--blueprint-line);}
+
+  #main{flex:1;display:flex;min-height:0;}
+  #viewport{flex:1;position:relative;background:
+    radial-gradient(ellipse at center, #123a58 0%, #0b2942 75%);}
+  #viewport canvas{display:block;}
+  #hint{position:absolute;bottom:32px;left:14px;font-size:11px;color:#7fa8cc;
+    background:rgba(11,41,66,0.7);padding:5px 9px;border:1px solid var(--blueprint-line-dim);}
+  #statusbar{position:absolute;left:0;right:0;bottom:0;height:28px;
+    background:#08202f;border-top:1px solid var(--blueprint-line-dim);
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 14px;font-size:11px;color:#7fa8cc;}
+  #statusbar span{white-space:nowrap;}
+  #info{position:absolute;top:14px;left:14px;font-size:12px;color:#e8f1fb;
+    background:rgba(11,41,66,0.85);border:1px solid var(--blueprint-line);
+    padding:10px 12px;max-width:230px;display:none;line-height:1.5;}
+  #info b{color:#9fd4ff;}
+
+  #side{width:340px;background:var(--panel-bg);color:#e8f1fb;overflow-y:auto;
+    border-left:3px solid var(--blueprint-line);padding:18px 18px 30px;}
+  #side h2{font-family:Georgia,serif;font-weight:normal;font-size:15px;
+    color:#9fd4ff;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid var(--blueprint-line-dim);}
+  .field{margin-bottom:14px;}
+  .field label{display:flex;justify-content:space-between;font-size:12px;
+    color:#bcd6ec;margin-bottom:5px;}
+  .field label span:last-child{color:#fff;font-weight:bold;}
+  .field input[type=range]{width:100%;accent-color:var(--blueprint-line);}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:12px;color:#bcd6ec;
+    margin-bottom:14px;cursor:pointer;}
+  .toggle input{accent-color:var(--blueprint-line);width:16px;height:16px;}
+  button#reset{width:100%;background:transparent;border:1px solid var(--blueprint-line);
+    color:#9fd4ff;padding:8px;font-family:inherit;font-size:12px;cursor:pointer;
+    margin-bottom:20px;}
+  button#reset:hover{background:var(--blueprint-line-dim);}
+
+  table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px;}
+  th,td{text-align:left;padding:5px 4px;border-bottom:1px solid var(--blueprint-line-dim);}
+  th{color:#9fd4ff;font-weight:normal;border-bottom:1px solid var(--blueprint-line);}
+  td.num,th.num{text-align:right;}
+  tfoot td{border-top:2px solid var(--blueprint-line);border-bottom:none;
+    color:#fff;font-weight:bold;padding-top:8px;}
+
+  .legend{display:flex;flex-direction:column;gap:6px;margin:14px 0;font-size:11px;color:#bcd6ec;}
+  .legend div{display:flex;align-items:center;gap:8px;}
+  .swatch{width:14px;height:14px;flex:none;}
+
+  @media (max-width: 760px){
+    #main{flex-direction:column;}
+    #side{width:auto;border-left:none;border-top:3px solid var(--blueprint-line);}
+    #viewport{height:52vh;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Steel Frame Digital Model — Parametric Viewer</h1>
+    <div class="sub">Grid-referenced structural model &amp; live material take-off, Itagaki-style workflow</div>
+  </header>
+  <div id="main">
+    <div id="viewport">
+      <div id="hint">Drag to orbit · Scroll to zoom · Click a member for details</div>
+      <div id="info"></div>
+      <div id="statusbar">
+        <span id="statusSel">0 objects selected</span>
+        <span id="statusCount">– objects in model</span>
+        <span>View: 3D · Grid: A-J / 1-N · Units: m, kg</span>
+      </div>
+    </div>
+    <div id="side">
+      <h2>Frame parameters</h2>
+
+      <div class="field">
+        <label><span>Bays — X direction</span><span id="vBaysX">4</span></label>
+        <input type="range" id="baysX" min="2" max="7" step="1" value="4">
+      </div>
+      <div class="field">
+        <label><span>Bays — Y direction</span><span id="vBaysY">3</span></label>
+        <input type="range" id="baysY" min="2" max="6" step="1" value="3">
+      </div>
+      <div class="field">
+        <label><span>Bay size (m)</span><span id="vBaySize">5.0</span></label>
+        <input type="range" id="baySize" min="3" max="8" step="0.5" value="5">
+      </div>
+      <div class="field">
+        <label><span>Stories</span><span id="vStories">4</span></label>
+        <input type="range" id="stories" min="1" max="8" step="1" value="4">
+      </div>
+      <div class="field">
+        <label><span>Story height (m)</span><span id="vStoryH">3.5</span></label>
+        <input type="range" id="storyH" min="2.5" max="4.5" step="0.25" value="3.5">
+      </div>
+      <label class="toggle"><input type="checkbox" id="bracing" checked> Diagonal bracing (corner bays)</label>
+      <label class="toggle"><input type="checkbox" id="secondary" checked> Secondary mid-span beams</label>
+
+      <button id="reset">Reset view</button>
+
+      <div class="legend">
+        <div><span class="swatch" style="background:#2b3a55"></span>Column — H-300x300x10x15</div>
+        <div><span class="swatch" style="background:#8b2f2f"></span>Primary beam — H-400x200x8x13</div>
+        <div><span class="swatch" style="background:#2f5c8b"></span>Secondary beam — H-300x150x6.5x9</div>
+        <div><span class="swatch" style="background:#b8863f"></span>Bracing — L-150x150x15</div>
+      </div>
+
+      <h2>Material take-off (live)</h2>
+      <table id="bomTable">
+        <thead><tr><th>Member</th><th class="num">Qty</th><th class="num">Wt (kg)</th></tr></thead>
+        <tbody id="bomBody"></tbody>
+        <tfoot>
+          <tr><td>Total</td><td class="num" id="bomQty">–</td><td class="num" id="bomWt">–</td></tr>
+          <tr><td colspan="3" style="font-weight:normal;font-size:11px;color:#9fd4ff;padding-top:4px;">≈ <span id="bomTons">–</span> t total steel</td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Unit weights (kg/m), JIS reference values ----------
+const W = { column: 94.0, primary: 66.0, secondary: 36.7, brace: 34.0, basePlate: 397.0 };
+
+// ---------- Three.js setup ----------
+const viewport = document.getElementById('viewport');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+viewport.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const dl = new THREE.DirectionalLight(0xffffff, 0.9);
+dl.position.set(20, 30, 15);
+scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0x9fd4ff, 0.3);
+dl2.position.set(-15, 10, -20);
+scene.add(dl2);
+
+const gridHelper = new THREE.GridHelper(60, 30, 0x2a597f, 0x1a3d5c);
+scene.add(gridHelper);
+
+const frameGroup = new THREE.Group();
+scene.add(frameGroup);
+
+const mats = {
+  column: new THREE.MeshStandardMaterial({ color: 0x2b3a55, metalness: 0.4, roughness: 0.5 }),
+  primary: new THREE.MeshStandardMaterial({ color: 0x8b2f2f, metalness: 0.4, roughness: 0.5 }),
+  secondary: new THREE.MeshStandardMaterial({ color: 0x2f5c8b, metalness: 0.4, roughness: 0.5 }),
+  brace: new THREE.MeshStandardMaterial({ color: 0xb8863f, metalness: 0.4, roughness: 0.5 }),
+  highlight: new THREE.MeshStandardMaterial({ color: 0xffe27a, metalness: 0.3, roughness: 0.4 })
+};
+
+const memberInfo = { column: 'H-300x300x10x15', primary: 'H-400x200x8x13', secondary: 'H-300x150x6.5x9', brace: 'L-150x150x15' };
+
+// ---------- Camera orbit (manual, no OrbitControls in r128) ----------
+let target = new THREE.Vector3(0, 4, 0);
+let radius = 40, azimuth = Math.PI * 0.28, elevation = 0.55;
+let dragging = false, lastX = 0, lastY = 0;
+
+function updateCamera() {
+  const clampedElev = Math.max(0.08, Math.min(1.5, elevation));
+  const x = target.x + radius * Math.cos(clampedElev) * Math.sin(azimuth);
+  const y = target.y + radius * Math.sin(clampedElev);
+  const z = target.z + radius * Math.cos(clampedElev) * Math.cos(azimuth);
+  camera.position.set(x, y, z);
+  camera.lookAt(target);
+}
+
+viewport.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener('pointerup', () => dragging = false);
+window.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  azimuth -= (e.clientX - lastX) * 0.007;
+  elevation += (e.clientY - lastY) * 0.006;
+  lastX = e.clientX; lastY = e.clientY;
+  updateCamera();
+});
+viewport.addEventListener('wheel', e => {
+  e.preventDefault();
+  radius = Math.max(8, Math.min(120, radius + e.deltaY * 0.04));
+  updateCamera();
+}, { passive: false });
+
+function resize() {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+window.addEventListener('resize', resize);
+
+// ---------- Raycasting for click-inspect ----------
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const infoBox = document.getElementById('info');
+let hovered = null;
+
+viewport.addEventListener('click', e => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(frameGroup.children);
+  if (hovered) { hovered.material = mats[hovered.userData.type]; hovered = null; }
+  if (hits.length) {
+    const obj = hits[0].object;
+    obj.material = mats.highlight;
+    hovered = obj;
+    const d = obj.userData;
+    infoBox.style.display = 'block';
+    infoBox.innerHTML = `<b>${d.id}</b> — ${d.label}<br>Section: ${d.section}<br>Length: ${d.length.toFixed(2)} m<br>Unit wt: ${d.unitWt.toFixed(1)} kg/m<br>Weight: ${(d.length*d.unitWt).toFixed(0)} kg`;
+    document.getElementById('statusSel').textContent = `1 object selected — ${d.id}`;
+  } else {
+    infoBox.style.display = 'none';
+    document.getElementById('statusSel').textContent = '0 objects selected';
+  }
+});
+
+// ---------- Text sprite helper (for grid axis labels) ----------
+function makeTextSprite(text, color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = color || '#9fd4ff';
+  ctx.font = 'bold 40px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 32, 34);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(1.4, 1.4, 1.4);
+  return sprite;
+}
+const axisLabelGroup = new THREE.Group();
+scene.add(axisLabelGroup);
+
+// ---------- Frame generation ----------
+function box(w, h, d) { return new THREE.BoxGeometry(w, h, d); }
+
+function addMember(type, label, id, section, unitWt, length, geom, pos, rot) {
+  const mesh = new THREE.Mesh(geom, mats[type]);
+  mesh.position.copy(pos);
+  if (rot) mesh.rotation.copy(rot);
+  mesh.userData = { type, label, id, section, unitWt, length };
+  frameGroup.add(mesh);
+}
+
+function clearFrame() {
+  while (frameGroup.children.length) frameGroup.remove(frameGroup.children[0]);
+  while (axisLabelGroup.children.length) axisLabelGroup.remove(axisLabelGroup.children[0]);
+}
+
+function buildFrame(p) {
+  clearFrame();
+  const counts = { column: 0, primary: 0, secondary: 0, brace: 0 };
+  const lenTot = { column: 0, primary: 0, secondary: 0, brace: 0 };
+  const nx = p.baysX, ny = p.baysY, bs = p.baySize, st = p.stories, sh = p.storyH;
+  const totalH = st * sh;
+  const originX = -(nx * bs) / 2, originZ = -(ny * bs) / 2;
+  const letters = 'ABCDEFGHIJ';
+  let colId = 1, beamId = 1, braceId = 1;
+
+  // columns
+  for (let i = 0; i <= nx; i++) {
+    for (let j = 0; j <= ny; j++) {
+      const x = originX + i * bs, z = originZ + j * bs;
+      addMember('column', 'Column', `C${colId++}`, memberInfo.column, W.column, totalH,
+        box(0.32, totalH, 0.32), new THREE.Vector3(x, totalH / 2, z));
+      counts.column++; lenTot.column += totalH;
+    }
+  }
+
+  // grid axis labels (letters along X, numbers along Z) at ground level
+  for (let i = 0; i <= nx; i++) {
+    const s1 = makeTextSprite(letters[i] || (i+1), '#9fd4ff');
+    s1.position.set(originX + i * bs, -1.1, originZ - 1.4);
+    axisLabelGroup.add(s1);
+  }
+  for (let j = 0; j <= ny; j++) {
+    const s2 = makeTextSprite(String(j + 1), '#ffb870');
+    s2.position.set(originX - 1.4, -1.1, originZ + j * bs);
+    axisLabelGroup.add(s2);
+  }
+
+  // primary beams at each floor level (both directions)
+  for (let lvl = 1; lvl <= st; lvl++) {
+    const y = lvl * sh;
+    for (let j = 0; j <= ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        const x = originX + i * bs + bs / 2, z = originZ + j * bs;
+        addMember('primary', 'Primary beam', `B${beamId++}`, memberInfo.primary, W.primary, bs,
+          box(bs, 0.35, 0.22), new THREE.Vector3(x, y, z));
+        counts.primary++; lenTot.primary += bs;
+      }
+    }
+    for (let i = 0; i <= nx; i++) {
+      for (let j = 0; j < ny; j++) {
+        const x = originX + i * bs, z = originZ + j * bs + bs / 2;
+        addMember('primary', 'Primary beam', `B${beamId++}`, memberInfo.primary, W.primary, bs,
+          box(0.22, 0.35, bs), new THREE.Vector3(x, y, z));
+        counts.primary++; lenTot.primary += bs;
+      }
+    }
+    // secondary mid-span beams (X direction lines, at mid-Y of each bay)
+    if (p.secondary) {
+      for (let i = 0; i < nx; i++) {
+        const xMid = originX + i * bs + bs / 2;
+        for (let j = 0; j < ny; j++) {
+          const z = originZ + j * bs + bs / 2;
+          addMember('secondary', 'Secondary beam', `S${beamId++}`, memberInfo.secondary, W.secondary, bs,
+            box(0.16, 0.26, bs), new THREE.Vector3(xMid, y - 0.02, z));
+          counts.secondary++; lenTot.secondary += bs;
+        }
+      }
+    }
+  }
+
+  // bracing in corner bay (X = last bay, Z = first bay), every story, X-pattern
+  if (p.bracing) {
+    const diag = Math.sqrt(bs * bs + sh * sh);
+    const xL = originX + (nx - 1) * bs, xR = originX + nx * bs;
+    const z0 = originZ;
+    for (let lvl = 0; lvl < st; lvl++) {
+      const y0 = lvl * sh, y1 = (lvl + 1) * sh;
+      const midY = (y0 + y1) / 2, midX = (xL + xR) / 2;
+      const angle1 = Math.atan2(sh, bs);
+      addMember('brace', 'Diagonal brace', `BR${braceId++}`, memberInfo.brace, W.brace, diag,
+        box(diag, 0.1, 0.1), new THREE.Vector3(midX, midY, z0), new THREE.Euler(0, 0, angle1));
+      addMember('brace', 'Diagonal brace', `BR${braceId++}`, memberInfo.brace, W.brace, diag,
+        box(diag, 0.1, 0.1), new THREE.Vector3(midX, midY, z0), new THREE.Euler(0, 0, -angle1));
+      counts.brace += 2; lenTot.brace += diag * 2;
+    }
+  }
+
+  target.set(0, totalH / 2.2, 0);
+  radius = Math.max(18, Math.max(nx * bs, ny * bs, totalH) * 1.3);
+  updateCamera();
+
+  return { counts, lenTot };
+}
+
+// ---------- BOM table ----------
+const rows = [
+  { key: 'column', label: 'Columns', section: memberInfo.column, w: W.column },
+  { key: 'primary', label: 'Primary beams', section: memberInfo.primary, w: W.primary },
+  { key: 'secondary', label: 'Secondary beams', section: memberInfo.secondary, w: W.secondary },
+  { key: 'brace', label: 'Bracing', section: memberInfo.brace, w: W.brace }
+];
+
+function updateBOM(data, baseplateCount) {
+  const tbody = document.getElementById('bomBody');
+  tbody.innerHTML = '';
+  let totalQty = 0, totalWt = 0;
+
+  rows.forEach(r => {
+    const qty = data.counts[r.key];
+    const wt = data.lenTot[r.key] * r.w;
+    if (qty === 0) return;
+    totalQty += qty; totalWt += wt;
+    tbody.innerHTML += `<tr><td>${r.label}</td><td class="num">${qty}</td><td class="num">${wt.toFixed(0)}</td></tr>`;
+  });
+
+  const bpWt = baseplateCount * W.basePlate;
+  totalQty += baseplateCount; totalWt += bpWt;
+  tbody.innerHTML += `<tr><td>Base plates</td><td class="num">${baseplateCount}</td><td class="num">${bpWt.toFixed(0)}</td></tr>`;
+
+  document.getElementById('bomQty').textContent = totalQty;
+  document.getElementById('bomWt').textContent = totalWt.toLocaleString(undefined, {maximumFractionDigits:0});
+  document.getElementById('bomTons').textContent = (totalWt / 1000).toFixed(2);
+  document.getElementById('statusCount').textContent = `${totalQty} objects in model`;
+}
+
+// ---------- Controls wiring ----------
+const ids = ['baysX', 'baysY', 'baySize', 'stories', 'storyH'];
+const labels = { baysX: 'vBaysX', baysY: 'vBaysY', baySize: 'vBaySize', stories: 'vStories', storyH: 'vStoryH' };
+
+function currentParams() {
+  return {
+    baysX: parseInt(document.getElementById('baysX').value),
+    baysY: parseInt(document.getElementById('baysY').value),
+    baySize: parseFloat(document.getElementById('baySize').value),
+    stories: parseInt(document.getElementById('stories').value),
+    storyH: parseFloat(document.getElementById('storyH').value),
+    bracing: document.getElementById('bracing').checked,
+    secondary: document.getElementById('secondary').checked
+  };
+}
+
+function refresh() {
+  const p = currentParams();
+  document.getElementById('vBaysX').textContent = p.baysX;
+  document.getElementById('vBaysY').textContent = p.baysY;
+  document.getElementById('vStories').textContent = p.stories;
+  document.getElementById('vBaySize').textContent = p.baySize.toFixed(1);
+  document.getElementById('vStoryH').textContent = p.storyH.toFixed(2);
+  const data = buildFrame(p);
+  const baseplateCount = (p.baysX + 1) * (p.baysY + 1);
+  updateBOM(data, baseplateCount);
+  infoBox.style.display = 'none';
+  hovered = null;
+}
+
+['baysX','baysY','baySize','stories','storyH','bracing','secondary'].forEach(id => {
+  document.getElementById(id).addEventListener('input', refresh);
+});
+document.getElementById('reset').addEventListener('click', () => {
+  const p = currentParams();
+  target.set(0, (p.stories * p.storyH) / 2.2, 0);
+  radius = Math.max(18, Math.max(p.baysX * p.baySize, p.baysY * p.baySize, p.stories * p.storyH) * 1.3);
+  azimuth = Math.PI * 0.28; elevation = 0.55;
+  updateCamera();
+});
+
+// ---------- Init ----------
+function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+resize();
+refresh();
+animate();
+</script>
+</body>
+</html>
